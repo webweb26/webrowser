@@ -28,6 +28,7 @@
     }
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   html, body { height: 100%; margin: 0; }
   body {
     display: flex; flex-direction: column;
@@ -35,7 +36,7 @@
     background: var(--bg); color: var(--text);
     font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   }
-  header { background: var(--panel); border-bottom: 1px solid var(--border); }
+  header { background: var(--panel); border-bottom: 1px solid var(--border); position: relative; z-index: 5; }
 
   /* Tabs */
   .tabs { display: flex; align-items: flex-end; gap: 4px; padding: 8px 12px 0; overflow-x: auto; }
@@ -78,15 +79,28 @@
   input[type=number] { width: 78px; }
   input[type=range] { width: 110px; }
 
-  .hint {
-    padding: 6px 12px 8px; color: var(--muted); font-size: 12.5px;
-    border-top: 1px solid var(--border);
+  /* Geräteauswahl für den Vergleich */
+  details.picker { position: relative; }
+  details.picker summary {
+    list-style: none; cursor: pointer; user-select: none;
+    border: 1px solid var(--border); background: var(--bg); border-radius: 6px; padding: 7px 12px;
   }
+  details.picker summary::-webkit-details-marker { display: none; }
+  details.picker .list {
+    position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; min-width: 250px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 12px; box-shadow: 0 8px 24px rgba(0,0,0,.25);
+  }
+  .cmp-group { margin: 8px 0 2px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .cmp-opt { display: flex; align-items: center; gap: 8px; padding: 3px 0; cursor: pointer; }
+
+  .hint { padding: 6px 12px 8px; color: var(--muted); font-size: 12.5px; border-top: 1px solid var(--border); }
   .hint button { all: unset; color: var(--accent); cursor: pointer; text-decoration: underline; }
 
-  /* Stage */
+  /* Bühne */
   main { flex: 1; min-height: 0; overflow: auto; display: flex; padding: 24px; }
-  .scaler { margin: auto; flex: none; }
+  #views { margin: auto; flex: none; }
+  .scaler { flex: none; }
   .device {
     position: relative; background: #fff;
     border: solid var(--bezel);
@@ -101,6 +115,10 @@
   }
   .empty.active { display: flex; }
   .info { text-align: center; color: var(--muted); font-size: 12.5px; margin-top: 12px; }
+
+  #compareView { display: flex; gap: 24px; align-items: flex-start; justify-content: center; }
+  .cmp-item { flex: none; display: flex; flex-direction: column; align-items: center; }
+  .cmp-label { margin-top: 8px; font-size: 12px; color: var(--muted); white-space: nowrap; }
 
   /* Vollbild */
   #exitFull { display: none; position: fixed; top: 12px; right: 12px; z-index: 10; opacity: .9; box-shadow: 0 2px 8px rgba(0,0,0,.3); }
@@ -117,13 +135,20 @@
     <button class="btn" id="back" type="button" title="Vorherige Adresse">←</button>
     <button class="btn" id="forward" type="button" title="Nächste Adresse">→</button>
     <form class="urlbar" id="urlForm">
-      <input type="text" id="url" placeholder="Adresse eingeben, z. B. wikipedia.org" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Webadresse">
-      <button class="btn primary" type="submit">Öffnen</button>
+      <input type="text" id="url" placeholder="Adresse oder Suchbegriff eingeben, z. B. wikipedia" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Webadresse oder Suchbegriff">
+      <button class="btn primary" type="submit">Los</button>
     </form>
-    <button class="btn" id="reload" title="Seite neu laden">Neu laden</button>
-    <button class="btn" id="external" title="Adresse in einem normalen Browser-Tab öffnen">Extern öffnen</button>
-
     <div class="group">
+      <label for="engine">Suche mit</label>
+      <select id="engine"></select>
+    </div>
+    <div class="group">
+      <label><input type="checkbox" id="newTab"> Suchen &amp; Links in neuem Tab</label>
+    </div>
+    <button class="btn" id="reload" type="button" title="Seite neu laden">Neu laden</button>
+    <button class="btn" id="external" type="button" title="Adresse in einem normalen Browser-Tab öffnen">Extern öffnen</button>
+
+    <div class="group" id="deviceGroup">
       <label for="device">Gerät</label>
       <select id="device"></select>
     </div>
@@ -131,8 +156,13 @@
       <input type="number" id="cw" min="200" max="4000" aria-label="Breite"> ×
       <input type="number" id="ch" min="200" max="4000" aria-label="Höhe">
     </div>
-    <button class="btn" id="rotate" title="Hoch- / Querformat">Drehen</button>
-    <button class="btn primary" id="fullBtn" title="Vorschau im Vollbild anzeigen">Vollbild</button>
+    <details class="picker" id="cmpPicker" hidden>
+      <summary>Geräte wählen (max. 4)</summary>
+      <div class="list" id="cmpList"></div>
+    </details>
+    <button class="btn" id="rotate" type="button" title="Hoch- / Querformat">Drehen</button>
+    <button class="btn" id="modeBtn" type="button" title="Dieselbe Seite auf mehreren Geräten gleichzeitig zeigen">Vergleichsansicht</button>
+    <button class="btn primary" id="fullBtn" type="button" title="Vorschau im Vollbild anzeigen">Vollbild</button>
 
     <div class="group">
       <label><input type="checkbox" id="fit"> Automatisch einpassen</label>
@@ -145,16 +175,20 @@
   </div>
   <div class="hint">
     Bleibt die Seite leer oder zeigt einen Fehler? Dann erlaubt die Webseite das Einbetten nicht (z. B. Google, YouTube, viele Banken).
-    <button id="hintExternal">Dann extern öffnen.</button>
+    <button id="hintExternal" type="button">Dann extern öffnen.</button>
+    Klicks auf Links innerhalb fremder Seiten laufen in der Vorschau selbst. Nur in der eingebauten Suche öffnen Links einen neuen Tab.
   </div>
 </header>
 
 <main id="stage">
   <button class="btn primary" id="exitFull" type="button">Vollbild beenden (Esc)</button>
-  <div>
-    <div class="scaler" id="scaler">
-      <div class="device" id="device-frame"></div>
+  <div id="views">
+    <div id="singleView">
+      <div class="scaler" id="scaler">
+        <div class="device" id="device-frame"></div>
+      </div>
     </div>
+    <div id="compareView" hidden></div>
     <div class="info" id="info"></div>
   </div>
 </main>
@@ -199,30 +233,51 @@
     for (var g = 0; g < DEVICES.length; g++)
       for (var i = 0; i < DEVICES[g].items.length; i++)
         if (DEVICES[g].items[i].id === id) return DEVICES[g].items[i];
-    return DEVICES[0].items[1];
+    return null;
   }
+
+  // ---------- Suche ----------
+  var ENGINES = {
+    builtin: { name: 'Eingebaut (Wikipedia)' },
+    ddg:     { name: 'DuckDuckGo',   url: 'https://html.duckduckgo.com/html/?q=' },
+    bing:    { name: 'Bing',         url: 'https://www.bing.com/search?q=' },
+    brave:   { name: 'Brave Search', url: 'https://search.brave.com/search?q=' },
+    wiki:    { name: 'Wikipedia (Seite)', url: 'https://de.wikipedia.org/w/index.php?search=' }
+  };
+  var SHORTCUTS = {
+    wikipedia: 'https://de.wikipedia.org',
+    github: 'https://github.com',
+    openstreetmap: 'https://www.openstreetmap.org',
+    stackoverflow: 'https://stackoverflow.com',
+    mdn: 'https://developer.mozilla.org'
+  };
 
   // ---------- Zustand ----------
   var STORAGE_KEY = 'geraete-browser-v1';
-  var state = { tabs: [], active: null, device: 'iphone-15', landscape: false, cw: 800, ch: 600, fit: true, zoom: 100, nextId: 1 };
+  var state = {
+    tabs: [], active: null, device: 'iphone-15', landscape: false,
+    cw: 800, ch: 600, fit: true, zoom: 100, nextId: 1,
+    mode: 'single', cmp: ['iphone-15', 'ipad-air', 'macbook-air'],
+    engine: 'builtin', newTab: true
+  };
 
   function save() {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        tabs: state.tabs, active: state.active, device: state.device, landscape: state.landscape,
-        cw: state.cw, ch: state.ch, fit: state.fit, zoom: state.zoom, nextId: state.nextId
-      }));
-    } catch (e) {}
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
   }
   function load() {
     try {
       var raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return;
       var s = JSON.parse(raw);
-      if (s && Array.isArray(s.tabs) && s.tabs.length) {
-        for (var k in s) if (k in state) state[k] = s[k];
-      }
+      if (!s || !Array.isArray(s.tabs) || !s.tabs.length) return;
+      for (var k in s) if (k in state) state[k] = s[k];
     } catch (e) {}
+    if (!findDevice(state.device)) state.device = 'iphone-15';
+    if (!ENGINES[state.engine]) state.engine = 'builtin';
+    if (!Array.isArray(state.cmp)) state.cmp = [];
+    state.cmp = state.cmp.filter(function (id) { return id !== 'custom' && findDevice(id); }).slice(0, 4);
+    if (!state.cmp.length) state.cmp = ['iphone-15', 'ipad-air', 'macbook-air'];
+    if (state.mode !== 'compare') state.mode = 'single';
   }
 
   // ---------- Elemente ----------
@@ -230,73 +285,144 @@
   var elTabs = $('tabs'), elUrl = $('url'), elDevice = $('device'), elFrame = $('device-frame'),
       elScaler = $('scaler'), elInfo = $('info'), elStage = $('stage'), elFit = $('fit'),
       elZoom = $('zoom'), elZoomVal = $('zoomVal'), elRotate = $('rotate'),
-      elCustom = $('customGroup'), elCw = $('cw'), elCh = $('ch'), elZoomGroup = $('zoomGroup');
+      elCustom = $('customGroup'), elCw = $('cw'), elCh = $('ch'), elZoomGroup = $('zoomGroup'),
+      elEngine = $('engine'), elNewTab = $('newTab'), elModeBtn = $('modeBtn'),
+      elDeviceGroup = $('deviceGroup'), elCmpPicker = $('cmpPicker'), elCmpList = $('cmpList'),
+      elSingle = $('singleView'), elCompare = $('compareView');
 
-  var frames = {}; // tabId -> { iframe, empty }
+  var frames = {};       // tabId -> { iframe, empty }
+  var cmpItems = [];     // Elemente der Vergleichsansicht
+  var cmpKey = '';
 
   // ---------- Hilfsfunktionen ----------
-  function normalizeUrl(input) {
-    var v = (input || '').trim();
-    if (!v) return '';
-    if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(v)) {
-      v = (/^(localhost|127\.0\.0\.1)(:|\/|$)/i.test(v) ? 'http://' : 'https://') + v;
-    }
-    try { return new URL(v).href; } catch (e) { return ''; }
+  function esc(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function isSearchUrl(u) { return !!u && u.indexOf('suche:') === 0; }
+  function displayUrl(u) { return isSearchUrl(u) ? u.slice(6) : (u || ''); }
+  function externalUrl(u) {
+    return isSearchUrl(u) ? ENGINES.wiki.url + encodeURIComponent(u.slice(6)) : u;
   }
   function titleFor(url) {
     if (!url) return 'Neuer Tab';
+    if (isSearchUrl(url)) return 'Suche: ' + url.slice(6);
     try { return new URL(url).hostname.replace(/^www\./, ''); } catch (e) { return url; }
   }
   function activeTab() {
     for (var i = 0; i < state.tabs.length; i++) if (state.tabs[i].id === state.active) return state.tabs[i];
     return null;
   }
+  function normalizeUrl(input) {
+    var v = (input || '').trim();
+    if (!v) return '';
+    if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(v)) {
+      v = (/^(localhost|127\.0\.0\.1)(:|\/|$)/i.test(v) ? 'http://' : 'https://') + v;
+    }
+    try {
+      var u = new URL(v);
+      return /^https?:$/.test(u.protocol) ? u.href : '';
+    } catch (e) { return ''; }
+  }
+  function looksLikeUrl(v) {
+    if (/\s/.test(v)) return false;
+    if (/^[a-z][a-z0-9+.-]*:\/\//i.test(v)) return true;
+    if (/^(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i.test(v)) return true;
+    return /^[^\s\/]+\.[a-z]{2,}([\/:?#].*)?$/i.test(v);
+  }
+  // Adresse, Kurzname oder Suchbegriff -> { url } oder { search }
+  function resolveInput(raw) {
+    var v = (raw || '').trim();
+    if (!v) return null;
+    var key = v.toLowerCase();
+    if (SHORTCUTS[key]) return { url: SHORTCUTS[key] };
+    if (looksLikeUrl(v)) {
+      var u = normalizeUrl(v);
+      return u ? { url: u } : null;
+    }
+    return { search: v };
+  }
+  function targetFor(r) {
+    if (!r) return '';
+    if (r.url) return r.url;
+    if (state.engine === 'builtin') return 'suche:' + r.search;
+    return ENGINES[state.engine].url + encodeURIComponent(r.search);
+  }
 
-  // ---------- Tabs ----------
-  function addTab(url) {
-    var tab = { id: state.nextId++, url: url || '' };
-    state.tabs.push(tab);
-    state.active = tab.id;
-    createFrame(tab);
-    renderAll();
+  // ---------- Eingebaute Suche (Wikipedia) ----------
+  function searchPage(q, body) {
+    return '<!doctype html><html lang="de"><head><meta charset="utf-8">' +
+      '<meta name="viewport" content="width=device-width,initial-scale=1"><style>' +
+      ':root{color-scheme:light dark}' +
+      'body{font:16px/1.45 system-ui,sans-serif;margin:0;padding:16px;background:#fff;color:#1d1f23}' +
+      '@media(prefers-color-scheme:dark){body{background:#16181c;color:#e8eaed}.r a{color:#8ab4f8!important}.u{color:#81c995!important}}' +
+      'h1{font-size:18px;margin:0 0 4px}.sub{color:#6b7280;font-size:13px;margin:0 0 16px}' +
+      '.r{margin:0 0 18px}.r a{font-size:17px;color:#1a0dab;text-decoration:none}.r a:hover{text-decoration:underline}' +
+      '.u{color:#188038;font-size:12.5px;word-break:break-all}.r p{margin:4px 0 0;font-size:14.5px}.muted{color:#6b7280}' +
+      '</style></head><body><h1>Suche: ' + esc(q) + '</h1>' +
+      '<p class="sub">Ergebnisse aus der deutschsprachigen Wikipedia. Ein Klick öffnet den Artikel.</p>' + body +
+      '<scr' + 'ipt>document.addEventListener("click",function(e){var a=e.target.closest&&e.target.closest("a");' +
+      'if(!a)return;e.preventDefault();parent.postMessage({type:"geraete-open",url:a.href},"*");});</scr' + 'ipt>' +
+      '</body></html>';
   }
-  function closeTab(id) {
-    if (state.tabs.length === 1) {
-      state.tabs[0].url = '';
-      state.tabs[0].hist = [];
-      state.tabs[0].pos = -1;
-      setFrameUrl(state.tabs[0]);
-      renderAll();
-      return;
-    }
-    var idx = state.tabs.findIndex(function (t) { return t.id === id; });
-    state.tabs.splice(idx, 1);
-    if (frames[id]) {
-      frames[id].iframe.remove(); frames[id].empty.remove(); delete frames[id];
-    }
-    if (state.active === id) state.active = state.tabs[Math.max(0, idx - 1)].id;
-    renderAll();
+  function renderSearch(iframe, q) {
+    iframe._q = q;
+    iframe.srcdoc = searchPage(q, '<p class="muted">Suche läuft …</p>');
+    var api = 'https://de.wikipedia.org/w/api.php?action=query&list=search&srlimit=20&format=json&origin=*&srsearch=' +
+      encodeURIComponent(q);
+    fetch(api).then(function (r) { return r.json(); }).then(function (data) {
+      if (iframe._q !== q) return;
+      var list = (data && data.query && data.query.search) || [];
+      if (!list.length) {
+        iframe.srcdoc = searchPage(q, '<p class="muted">Keine Treffer in der Wikipedia.</p>');
+        return;
+      }
+      var html = list.map(function (it) {
+        var snippet = new DOMParser().parseFromString(it.snippet || '', 'text/html').body.textContent;
+        var href = 'https://de.wikipedia.org/wiki/' + encodeURIComponent(it.title.replace(/ /g, '_'));
+        return '<div class="r"><a href="' + esc(href) + '">' + esc(it.title) + '</a>' +
+          '<div class="u">' + esc(href) + '</div><p>' + esc(snippet) + '</p></div>';
+      }).join('');
+      iframe.srcdoc = searchPage(q, html);
+    }).catch(function () {
+      if (iframe._q !== q) return;
+      iframe.srcdoc = searchPage(q, '<p class="muted">Die Suche konnte nicht geladen werden. Bitte prüfen Sie die Internetverbindung.</p>');
+    });
   }
-  function createFrame(tab) {
+
+  function loadInto(iframe, url) {
+    if (isSearchUrl(url)) { renderSearch(iframe, url.slice(6)); return; }
+    iframe._q = null;
+    iframe.removeAttribute('srcdoc');
+    iframe.src = url ? url : 'about:blank';
+  }
+
+  // ---------- Frames ----------
+  function makeIframe() {
     var iframe = document.createElement('iframe');
     iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads');
     iframe.setAttribute('referrerpolicy', 'no-referrer');
     iframe.title = 'Vorschau';
+    return iframe;
+  }
+  function makeEmpty() {
     var empty = document.createElement('div');
     empty.className = 'empty';
-    empty.innerHTML = '<div>Gib oben eine Adresse ein und drücke „Öffnen“.<br><small>Du kannst oben mit „+“ weitere Tabs anlegen.</small></div>';
+    empty.innerHTML = '<div>Gib oben eine Adresse oder einen Suchbegriff ein und drücke „Los“.<br><small>Mit „+“ legst du weitere Tabs an.</small></div>';
+    return empty;
+  }
+  function createFrame(tab) {
+    var iframe = makeIframe(), empty = makeEmpty();
     elFrame.appendChild(iframe);
     elFrame.appendChild(empty);
     frames[tab.id] = { iframe: iframe, empty: empty };
-    setFrameUrl(tab);
+    loadInto(iframe, tab.url);
   }
   function setFrameUrl(tab) {
     var f = frames[tab.id];
-    if (!f) return;
-    f.iframe.src = tab.url ? tab.url : 'about:blank';
+    if (f) loadInto(f.iframe, tab.url);
   }
 
-  // Verlauf der eingegebenen Adressen (nicht der Klicks innerhalb der Seite)
+  // ---------- Tabs & Verlauf ----------
   function ensureHist(tab) {
     if (!Array.isArray(tab.hist)) {
       tab.hist = tab.url ? [tab.url] : [];
@@ -324,8 +450,33 @@
     setFrameUrl(tab);
     renderAll();
   }
+  function addTab(url) {
+    var tab = { id: state.nextId++, url: '', hist: [], pos: -1 };
+    state.tabs.push(tab);
+    state.active = tab.id;
+    createFrame(tab);
+    if (url) navigate(tab, url);
+    renderAll();
+  }
+  function closeTab(id) {
+    if (state.tabs.length === 1) {
+      state.tabs[0].url = '';
+      state.tabs[0].hist = [];
+      state.tabs[0].pos = -1;
+      setFrameUrl(state.tabs[0]);
+      renderAll();
+      return;
+    }
+    var idx = state.tabs.findIndex(function (t) { return t.id === id; });
+    state.tabs.splice(idx, 1);
+    if (frames[id]) {
+      frames[id].iframe.remove(); frames[id].empty.remove(); delete frames[id];
+    }
+    if (state.active === id) state.active = state.tabs[Math.max(0, idx - 1)].id;
+    renderAll();
+  }
 
-  // Vollbild
+  // ---------- Vollbild ----------
   function isFull() { return document.body.classList.contains('full'); }
   function enterFull() {
     document.body.classList.add('full');
@@ -379,8 +530,12 @@
     if (STYLE[d.type].rotatable && state.landscape) { var tmp = w; w = h; h = tmp; }
     return { w: w, h: h, d: d };
   }
+  function avail() {
+    var pad = isFull() ? 32 : 48;
+    return { w: Math.max(100, elStage.clientWidth - pad), h: Math.max(100, elStage.clientHeight - pad - 24) };
+  }
 
-  function layout() {
+  function layoutSingle() {
     var s = currentSize();
     var st = STYLE[s.d.type];
     var b = st.bezel;
@@ -393,10 +548,8 @@
 
     var scale;
     if (state.fit) {
-      var pad = isFull() ? 32 : 48;
-      var availW = Math.max(100, elStage.clientWidth - pad);
-      var availH = Math.max(100, elStage.clientHeight - pad - 24);
-      scale = Math.min(1, availW / totalW, availH / totalH);
+      var av = avail();
+      scale = Math.min(1, av.w / totalW, av.h / totalH);
     } else {
       scale = state.zoom / 100;
     }
@@ -404,13 +557,72 @@
     elScaler.style.width = Math.round(totalW * scale) + 'px';
     elScaler.style.height = Math.round(totalH * scale) + 'px';
 
-    elInfo.textContent = s.d.name + (STYLE[s.d.type].rotatable ? (state.landscape ? ' (quer)' : ' (hoch)') : '') +
+    elInfo.textContent = s.d.name + (st.rotatable ? (state.landscape ? ' (quer)' : ' (hoch)') : '') +
       ' · ' + s.w + ' × ' + s.h + ' px · Anzeige ' + Math.round(scale * 100) + ' %';
+  }
+
+  function syncCompare() {
+    var tab = activeTab();
+    var key = [tab ? tab.id : '', tab ? tab.url : '', state.cmp.join(','), state.landscape].join('|');
+    if (key === cmpKey) return;
+    cmpKey = key;
+    elCompare.innerHTML = '';
+    cmpItems = [];
+    var has = !!(tab && tab.url);
+    state.cmp.forEach(function (id) {
+      var d = findDevice(id);
+      if (!d) return;
+      var st = STYLE[d.type];
+      var w = d.w, h = d.h;
+      if (st.rotatable && state.landscape) { w = d.h; h = d.w; }
+
+      var item = document.createElement('div'); item.className = 'cmp-item';
+      var scaler = document.createElement('div'); scaler.className = 'scaler';
+      var frame = document.createElement('div'); frame.className = 'device';
+      frame.style.width = w + 'px'; frame.style.height = h + 'px';
+      frame.style.borderWidth = st.bezel + 'px'; frame.style.borderRadius = st.radius + 'px';
+      var iframe = makeIframe(), empty = makeEmpty();
+      iframe.classList.toggle('active', has);
+      empty.classList.toggle('active', !has);
+      frame.appendChild(iframe); frame.appendChild(empty);
+      scaler.appendChild(frame);
+      var label = document.createElement('div'); label.className = 'cmp-label';
+      label.textContent = d.name + ' · ' + w + ' × ' + h;
+      item.appendChild(scaler); item.appendChild(label);
+      elCompare.appendChild(item);
+      if (has) loadInto(iframe, tab.url);
+      cmpItems.push({ frame: frame, scaler: scaler, iframe: iframe, totalW: w + st.bezel * 2, totalH: h + st.bezel * 2 });
+    });
+  }
+
+  function layoutCompare() {
+    if (!cmpItems.length) return;
+    var gap = 24, sumW = gap * (cmpItems.length - 1), maxH = 0;
+    cmpItems.forEach(function (it) { sumW += it.totalW; maxH = Math.max(maxH, it.totalH); });
+    maxH += 28;
+    var scale;
+    if (state.fit) {
+      var av = avail();
+      scale = Math.min(1, av.w / sumW, av.h / maxH);
+    } else {
+      scale = state.zoom / 100;
+    }
+    cmpItems.forEach(function (it) {
+      it.frame.style.transform = 'scale(' + scale + ')';
+      it.scaler.style.width = Math.round(it.totalW * scale) + 'px';
+      it.scaler.style.height = Math.round(it.totalH * scale) + 'px';
+    });
+    elInfo.textContent = 'Vergleich: ' + cmpItems.length + ' Geräte · Anzeige ' + Math.round(scale * 100) + ' %';
+  }
+
+  function layout() {
+    if (state.mode === 'compare') layoutCompare(); else layoutSingle();
     elZoomVal.textContent = state.zoom + ' %';
   }
 
   function renderAll() {
     renderTabs();
+    var compare = state.mode === 'compare';
     state.tabs.forEach(function (t) {
       var f = frames[t.id];
       var isActive = t.id === state.active;
@@ -418,17 +630,28 @@
       f.empty.classList.toggle('active', isActive && !t.url);
     });
     var tab = activeTab();
-    elUrl.value = tab ? tab.url : '';
-
-    elDevice.value = state.device;
-    var s = currentSize();
-    elRotate.disabled = !STYLE[s.d.type].rotatable;
+    if (document.activeElement !== elUrl) elUrl.value = tab ? displayUrl(tab.url) : '';
     if (tab) {
       ensureHist(tab);
       $('back').disabled = tab.pos <= 0;
       $('forward').disabled = tab.pos >= tab.hist.length - 1;
     }
-    elCustom.hidden = state.device !== 'custom';
+
+    elSingle.hidden = compare;
+    elCompare.hidden = !compare;
+    elModeBtn.textContent = compare ? 'Einzelansicht' : 'Vergleichsansicht';
+    elDeviceGroup.hidden = compare;
+    elCustom.hidden = compare || state.device !== 'custom';
+    elCmpPicker.hidden = !compare;
+    if (compare) syncCompare();
+
+    elDevice.value = state.device;
+    elEngine.value = state.engine;
+    elNewTab.checked = state.newTab;
+    var rotatable = compare
+      ? state.cmp.some(function (id) { var d = findDevice(id); return d && STYLE[d.type].rotatable; })
+      : STYLE[currentSize().d.type].rotatable;
+    elRotate.disabled = !rotatable;
     elCw.value = state.cw; elCh.value = state.ch;
     elFit.checked = state.fit;
     elZoom.value = state.zoom;
@@ -438,17 +661,73 @@
     save();
   }
 
-  // ---------- Ereignisse ----------
-  $('urlForm').addEventListener('submit', function (e) {
-    e.preventDefault();
+  // ---------- Aktionen ----------
+  function openFromInput() {
+    var r = resolveInput(elUrl.value);
+    if (!r) { elUrl.focus(); return; }
+    var target = targetFor(r);
     var tab = activeTab();
-    var url = normalizeUrl(elUrl.value);
-    if (!url) { elUrl.focus(); return; }
-    navigate(tab, url);
-    renderAll();
-  });
+    if (r.search && state.newTab && tab && tab.url) {
+      addTab(target);
+    } else {
+      navigate(tab, target);
+      renderAll();
+    }
+    var now = activeTab();
+    elUrl.value = now ? displayUrl(now.url) : '';
+  }
+  function openExternal() {
+    var tab = activeTab();
+    var u = tab && tab.url;
+    if (!u) u = targetFor(resolveInput(elUrl.value));
+    u = externalUrl(u);
+    if (u) window.open(u, '_blank', 'noopener');
+  }
+  function reloadAll() {
+    var tab = activeTab();
+    if (!tab || !tab.url) return;
+    setFrameUrl(tab);
+    cmpItems.forEach(function (it) { loadInto(it.iframe, tab.url); });
+  }
+
+  function buildCmpList() {
+    elCmpList.innerHTML = '';
+    DEVICES.forEach(function (g) {
+      if (g.group === 'Eigene Größe') return;
+      var head = document.createElement('div');
+      head.className = 'cmp-group'; head.textContent = g.group;
+      elCmpList.appendChild(head);
+      g.items.forEach(function (d) {
+        var lab = document.createElement('label'); lab.className = 'cmp-opt';
+        var cb = document.createElement('input');
+        cb.type = 'checkbox'; cb.value = d.id; cb.checked = state.cmp.indexOf(d.id) > -1;
+        cb.addEventListener('change', function () {
+          var ids = [];
+          DEVICES.forEach(function (g2) {
+            g2.items.forEach(function (d2) {
+              var c = elCmpList.querySelector('input[value="' + d2.id + '"]');
+              if (c && c.checked) ids.push(d2.id);
+            });
+          });
+          if (ids.length > 4) { cb.checked = false; return; }
+          if (ids.length < 1) { cb.checked = true; return; }
+          state.cmp = ids;
+          renderAll();
+        });
+        lab.appendChild(cb);
+        lab.appendChild(document.createTextNode(d.name));
+        elCmpList.appendChild(lab);
+      });
+    });
+  }
+
+  // ---------- Ereignisse ----------
+  $('urlForm').addEventListener('submit', function (e) { e.preventDefault(); openFromInput(); });
   $('back').addEventListener('click', function () { goHistory(-1); });
   $('forward').addEventListener('click', function () { goHistory(1); });
+  $('reload').addEventListener('click', reloadAll);
+  $('external').addEventListener('click', openExternal);
+  $('hintExternal').addEventListener('click', openExternal);
   $('fullBtn').addEventListener('click', enterFull);
   $('exitFull').addEventListener('click', exitFull);
   document.addEventListener('fullscreenchange', onFsChange);
@@ -456,18 +735,28 @@
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && isFull()) exitFull();
   });
-  $('reload').addEventListener('click', function () {
-    var tab = activeTab();
-    if (tab && tab.url) setFrameUrl(tab);
-  });
-  function openExternal() {
-    var tab = activeTab();
-    var url = (tab && tab.url) || normalizeUrl(elUrl.value);
-    if (url) window.open(url, '_blank', 'noopener');
-  }
-  $('external').addEventListener('click', openExternal);
-  $('hintExternal').addEventListener('click', openExternal);
 
+  // Klicks auf Links in der eingebauten Suche
+  window.addEventListener('message', function (e) {
+    var d = e.data;
+    if (!d || d.type !== 'geraete-open' || typeof d.url !== 'string') return;
+    var ok = false, list = document.querySelectorAll('iframe');
+    for (var i = 0; i < list.length; i++) if (list[i].contentWindow === e.source) ok = true;
+    if (!ok || !/^https?:\/\//i.test(d.url)) return;
+    if (state.newTab) {
+      addTab(d.url);
+    } else {
+      navigate(activeTab(), d.url);
+      renderAll();
+    }
+  });
+
+  elEngine.addEventListener('change', function () { state.engine = elEngine.value; save(); });
+  elNewTab.addEventListener('change', function () { state.newTab = elNewTab.checked; save(); });
+  elModeBtn.addEventListener('click', function () {
+    state.mode = state.mode === 'compare' ? 'single' : 'compare';
+    renderAll();
+  });
   elDevice.addEventListener('change', function () { state.device = elDevice.value; state.landscape = false; renderAll(); });
   elRotate.addEventListener('click', function () { state.landscape = !state.landscape; renderAll(); });
   elFit.addEventListener('change', function () { state.fit = elFit.checked; renderAll(); });
@@ -493,13 +782,19 @@
     });
     elDevice.appendChild(og);
   });
+  Object.keys(ENGINES).forEach(function (k) {
+    var o = document.createElement('option');
+    o.value = k; o.textContent = ENGINES[k].name;
+    elEngine.appendChild(o);
+  });
 
   load();
   if (!state.tabs.length) {
-    state.tabs.push({ id: state.nextId++, url: '' });
+    state.tabs.push({ id: state.nextId++, url: '', hist: [], pos: -1 });
     state.active = state.tabs[0].id;
   }
   if (!activeTab()) state.active = state.tabs[0].id;
+  buildCmpList();
   state.tabs.forEach(createFrame);
   renderAll();
 })();
