@@ -101,6 +101,12 @@
   }
   .empty.active { display: flex; }
   .info { text-align: center; color: var(--muted); font-size: 12.5px; margin-top: 12px; }
+
+  /* Vollbild */
+  #exitFull { display: none; position: fixed; top: 12px; right: 12px; z-index: 10; opacity: .9; box-shadow: 0 2px 8px rgba(0,0,0,.3); }
+  body.full header { display: none; }
+  body.full #exitFull { display: block; }
+  body.full main { padding: 16px; background: var(--bg); }
 </style>
 </head>
 <body>
@@ -108,6 +114,8 @@
 <header>
   <div class="tabs" id="tabs"></div>
   <div class="toolbar">
+    <button class="btn" id="back" type="button" title="Vorherige Adresse">←</button>
+    <button class="btn" id="forward" type="button" title="Nächste Adresse">→</button>
     <form class="urlbar" id="urlForm">
       <input type="text" id="url" placeholder="Adresse eingeben, z. B. wikipedia.org" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Webadresse">
       <button class="btn primary" type="submit">Öffnen</button>
@@ -124,6 +132,7 @@
       <input type="number" id="ch" min="200" max="4000" aria-label="Höhe">
     </div>
     <button class="btn" id="rotate" title="Hoch- / Querformat">Drehen</button>
+    <button class="btn primary" id="fullBtn" title="Vorschau im Vollbild anzeigen">Vollbild</button>
 
     <div class="group">
       <label><input type="checkbox" id="fit"> Automatisch einpassen</label>
@@ -141,6 +150,7 @@
 </header>
 
 <main id="stage">
+  <button class="btn primary" id="exitFull" type="button">Vollbild beenden (Esc)</button>
   <div>
     <div class="scaler" id="scaler">
       <div class="device" id="device-frame"></div>
@@ -253,6 +263,8 @@
   function closeTab(id) {
     if (state.tabs.length === 1) {
       state.tabs[0].url = '';
+      state.tabs[0].hist = [];
+      state.tabs[0].pos = -1;
       setFrameUrl(state.tabs[0]);
       renderAll();
       return;
@@ -282,6 +294,60 @@
     var f = frames[tab.id];
     if (!f) return;
     f.iframe.src = tab.url ? tab.url : 'about:blank';
+  }
+
+  // Verlauf der eingegebenen Adressen (nicht der Klicks innerhalb der Seite)
+  function ensureHist(tab) {
+    if (!Array.isArray(tab.hist)) {
+      tab.hist = tab.url ? [tab.url] : [];
+      tab.pos = tab.hist.length - 1;
+    }
+  }
+  function navigate(tab, url) {
+    ensureHist(tab);
+    if (tab.hist[tab.pos] !== url) {
+      tab.hist = tab.hist.slice(0, tab.pos + 1);
+      tab.hist.push(url);
+      tab.pos = tab.hist.length - 1;
+    }
+    tab.url = url;
+    setFrameUrl(tab);
+  }
+  function goHistory(step) {
+    var tab = activeTab();
+    if (!tab) return;
+    ensureHist(tab);
+    var np = tab.pos + step;
+    if (np < 0 || np >= tab.hist.length) return;
+    tab.pos = np;
+    tab.url = tab.hist[np];
+    setFrameUrl(tab);
+    renderAll();
+  }
+
+  // Vollbild
+  function isFull() { return document.body.classList.contains('full'); }
+  function enterFull() {
+    document.body.classList.add('full');
+    var req = elStage.requestFullscreen || elStage.webkitRequestFullscreen;
+    if (req) {
+      try { var p = req.call(elStage); if (p && p.catch) p.catch(function () {}); } catch (e) {}
+    }
+    layout();
+  }
+  function exitFull() {
+    document.body.classList.remove('full');
+    var fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+    if (fsEl) {
+      var ex = document.exitFullscreen || document.webkitExitFullscreen;
+      try { var p = ex.call(document); if (p && p.catch) p.catch(function () {}); } catch (e) {}
+    }
+    layout();
+  }
+  function onFsChange() {
+    var fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+    if (!fsEl && isFull()) document.body.classList.remove('full');
+    layout();
   }
 
   // ---------- Rendering ----------
@@ -327,8 +393,9 @@
 
     var scale;
     if (state.fit) {
-      var availW = Math.max(100, elStage.clientWidth - 48);
-      var availH = Math.max(100, elStage.clientHeight - 48 - 24);
+      var pad = isFull() ? 32 : 48;
+      var availW = Math.max(100, elStage.clientWidth - pad);
+      var availH = Math.max(100, elStage.clientHeight - pad - 24);
       scale = Math.min(1, availW / totalW, availH / totalH);
     } else {
       scale = state.zoom / 100;
@@ -356,6 +423,11 @@
     elDevice.value = state.device;
     var s = currentSize();
     elRotate.disabled = !STYLE[s.d.type].rotatable;
+    if (tab) {
+      ensureHist(tab);
+      $('back').disabled = tab.pos <= 0;
+      $('forward').disabled = tab.pos >= tab.hist.length - 1;
+    }
     elCustom.hidden = state.device !== 'custom';
     elCw.value = state.cw; elCh.value = state.ch;
     elFit.checked = state.fit;
@@ -372,9 +444,17 @@
     var tab = activeTab();
     var url = normalizeUrl(elUrl.value);
     if (!url) { elUrl.focus(); return; }
-    tab.url = url;
-    setFrameUrl(tab);
+    navigate(tab, url);
     renderAll();
+  });
+  $('back').addEventListener('click', function () { goHistory(-1); });
+  $('forward').addEventListener('click', function () { goHistory(1); });
+  $('fullBtn').addEventListener('click', enterFull);
+  $('exitFull').addEventListener('click', exitFull);
+  document.addEventListener('fullscreenchange', onFsChange);
+  document.addEventListener('webkitfullscreenchange', onFsChange);
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && isFull()) exitFull();
   });
   $('reload').addEventListener('click', function () {
     var tab = activeTab();
