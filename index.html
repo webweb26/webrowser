@@ -66,6 +66,7 @@
     font: inherit; color: var(--text); background: var(--bg);
     border: 1px solid var(--border); border-radius: 6px; padding: 7px 10px;
   }
+  select { max-width: 330px; }
   .urlbar input { flex: 1; min-width: 0; }
   button.btn {
     font: inherit; color: var(--text); background: var(--bg);
@@ -87,7 +88,8 @@
   }
   details.picker summary::-webkit-details-marker { display: none; }
   details.picker .list {
-    position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; min-width: 250px;
+    position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; min-width: 270px;
+    max-height: 70vh; overflow: auto;
     background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
     padding: 8px 12px; box-shadow: 0 8px 24px rgba(0,0,0,.25);
   }
@@ -96,6 +98,7 @@
 
   .hint { padding: 6px 12px 8px; color: var(--muted); font-size: 12.5px; border-top: 1px solid var(--border); }
   .hint button { all: unset; color: var(--accent); cursor: pointer; text-decoration: underline; }
+  .hint p { margin: 0 0 4px; }
 
   /* Bühne */
   main { flex: 1; min-height: 0; overflow: auto; display: flex; padding: 24px; }
@@ -106,6 +109,7 @@
     border: solid var(--bezel);
     box-shadow: 0 10px 30px rgba(0,0,0,.28);
     transform-origin: top left; overflow: hidden;
+    transition: width .3s ease, height .3s ease, border-radius .3s ease;
   }
   .device iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #fff; display: none; }
   .device iframe.active { display: block; }
@@ -115,6 +119,14 @@
   }
   .empty.active { display: flex; }
   .info { text-align: center; color: var(--muted); font-size: 12.5px; margin-top: 12px; }
+
+  /* Falz bei aufgeklappten Faltgeräten */
+  .crease { position: absolute; z-index: 3; pointer-events: none; }
+  .crease.off { display: none; }
+  .crease.v { left: 50%; top: 0; bottom: 0; width: 6px; margin-left: -3px;
+    background: linear-gradient(90deg, rgba(0,0,0,0), rgba(0,0,0,.22) 45%, rgba(255,255,255,.14) 55%, rgba(0,0,0,0)); }
+  .crease.h { top: 50%; left: 0; right: 0; height: 6px; margin-top: -3px;
+    background: linear-gradient(180deg, rgba(0,0,0,0), rgba(0,0,0,.22) 45%, rgba(255,255,255,.14) 55%, rgba(0,0,0,0)); }
 
   #compareView { display: flex; gap: 24px; align-items: flex-start; justify-content: center; }
   .cmp-item { flex: none; display: flex; flex-direction: column; align-items: center; }
@@ -160,6 +172,7 @@
       <summary>Geräte wählen (max. 4)</summary>
       <div class="list" id="cmpList"></div>
     </details>
+    <button class="btn primary" id="foldBtn" type="button" title="Faltbares Gerät auf- oder zuklappen" hidden>Aufklappen</button>
     <button class="btn" id="rotate" type="button" title="Hoch- / Querformat">Drehen</button>
     <button class="btn" id="modeBtn" type="button" title="Dieselbe Seite auf mehreren Geräten gleichzeitig zeigen">Vergleichsansicht</button>
     <button class="btn primary" id="fullBtn" type="button" title="Vorschau im Vollbild anzeigen">Vollbild</button>
@@ -174,9 +187,15 @@
     </div>
   </div>
   <div class="hint">
-    Bleibt die Seite leer oder zeigt einen Fehler? Dann erlaubt die Webseite das Einbetten nicht (z. B. Google, YouTube, viele Banken).
-    <button id="hintExternal" type="button">Dann extern öffnen.</button>
-    Klicks auf Links innerhalb fremder Seiten laufen in der Vorschau selbst. Nur in der eingebauten Suche öffnen Links einen neuen Tab.
+    <p>
+      Bleibt die Seite leer oder zeigt einen Fehler? Dann erlaubt die Webseite das Einbetten nicht (z. B. Google, YouTube, viele Banken).
+      <button id="hintExternal" type="button">Dann extern öffnen.</button>
+      Klicks auf Links innerhalb fremder Seiten laufen in der Vorschau selbst. Nur in der eingebauten Suche öffnen Links einen neuen Tab.
+    </p>
+    <p>
+      Alle Größen sind CSS-Pixel (die Breite, die Webseiten sehen). „ca.“ bedeutet geschätzt: Bei Android-Geräten hängt der Wert von der Einstellung „Anzeigegröße“ ab.
+      Bei Computern ist der Browserbereich in Wirklichkeit etwas kleiner als der Bildschirm.
+    </p>
   </div>
 </header>
 
@@ -196,44 +215,91 @@
 <script>
 (function () {
   // ---------- Geräteliste ----------
+  // w/h = CSS-Pixel im Hochformat. Faltgeräte: w/h = zugeklappt, open = aufgeklappt.
+  // approx = geschätzt (Android-Werte hängen von der Anzeigegröße-Einstellung ab).
   var DEVICES = [
-    { group: 'Handys', items: [
-      { id: 'iphone-se',   name: 'iPhone SE',            w: 375,  h: 667,  type: 'phone' },
-      { id: 'iphone-15',   name: 'iPhone 15',            w: 393,  h: 852,  type: 'phone' },
-      { id: 'iphone-15pm', name: 'iPhone 15 Pro Max',    w: 430,  h: 932,  type: 'phone' },
-      { id: 'pixel-8',     name: 'Google Pixel 8',       w: 412,  h: 915,  type: 'phone' },
-      { id: 'galaxy-s23',  name: 'Samsung Galaxy S23',   w: 360,  h: 780,  type: 'phone' },
-      { id: 'galaxy-fold', name: 'Galaxy Z Fold (zugeklappt)', w: 344, h: 882, type: 'phone' }
+    { group: 'iPhone', items: [
+      { id: 'iphone-se',    name: 'iPhone SE',                   w: 375, h: 667, type: 'phone' },
+      { id: 'iphone-17e',   name: 'iPhone 17e',                  w: 390, h: 844, type: 'phone' },
+      { id: 'iphone-18pro', name: 'iPhone 18 Pro / iPhone 17',   w: 402, h: 874, type: 'phone' },
+      { id: 'iphone-air',   name: 'iPhone Air',                  w: 420, h: 912, type: 'phone' },
+      { id: 'iphone-18pm',  name: 'iPhone 18 Pro Max',           w: 440, h: 956, type: 'phone' }
+    ]},
+    { group: 'Android', items: [
+      { id: 'galaxy-s26',   name: 'Samsung Galaxy S26',          w: 360, h: 780, type: 'phone' },
+      { id: 'galaxy-s25u',  name: 'Samsung Galaxy S25 Ultra',    w: 412, h: 891, type: 'phone' },
+      { id: 'pixel-11',     name: 'Google Pixel 11',             w: 411, h: 923, type: 'phone', approx: true },
+      { id: 'pixel-11pxl',  name: 'Google Pixel 11 Pro XL',      w: 448, h: 997, type: 'phone' }
+    ]},
+    { group: 'Faltbare Handys', items: [
+      { id: 'iphone-duo',   name: 'iPhone Duo',  type: 'phone', hinge: 'v',
+        w: 466, h: 678,  open: { w: 951, h: 669 } },
+      { id: 'galaxy-fold8', name: 'Samsung Galaxy Z Fold 8', type: 'phone', hinge: 'v', approx: true,
+        w: 416, h: 657,  open: { w: 816, h: 616 } },
+      { id: 'galaxy-fold7', name: 'Samsung Galaxy Z Fold 7', type: 'phone', hinge: 'v', approx: true,
+        w: 360, h: 840,  open: { w: 984, h: 1092 } },
+      { id: 'pixel-10pf',   name: 'Google Pixel 10 Pro Fold', type: 'phone', hinge: 'v', approx: true,
+        w: 411, h: 900,  open: { w: 791, h: 820 } },
+      { id: 'galaxy-flip7', name: 'Samsung Galaxy Z Flip 7 (Klapp)', type: 'phone', hinge: 'h', approx: true,
+        w: 367, h: 349,  open: { w: 360, h: 840 } }
     ]},
     { group: 'Tablets', items: [
-      { id: 'ipad-mini',   name: 'iPad mini',            w: 744,  h: 1133, type: 'tablet' },
-      { id: 'ipad-air',    name: 'iPad Air',             w: 820,  h: 1180, type: 'tablet' },
-      { id: 'ipad-pro',    name: 'iPad Pro 12,9"',       w: 1024, h: 1366, type: 'tablet' },
-      { id: 'galaxy-tab',  name: 'Samsung Galaxy Tab S8', w: 800, h: 1280, type: 'tablet' }
+      { id: 'ipad-mini',    name: 'iPad mini',                   w: 744,  h: 1133, type: 'tablet' },
+      { id: 'ipad-air-11',  name: 'iPad Air 11"',                w: 820,  h: 1180, type: 'tablet' },
+      { id: 'ipad-pro-11',  name: 'iPad Pro 11"',                w: 834,  h: 1210, type: 'tablet' },
+      { id: 'ipad-air-13',  name: 'iPad Air 13"',                w: 1024, h: 1366, type: 'tablet' },
+      { id: 'ipad-pro-13',  name: 'iPad Pro 13"',                w: 1032, h: 1376, type: 'tablet' },
+      { id: 'galaxy-tab-s8', name: 'Samsung Galaxy Tab S8',      w: 800,  h: 1280, type: 'tablet' }
     ]},
     { group: 'Computer', items: [
-      { id: 'macbook-air', name: 'MacBook Air 13"',      w: 1440, h: 900,  type: 'laptop' },
-      { id: 'macbook-pro', name: 'MacBook Pro 16"',      w: 1728, h: 1117, type: 'laptop' },
-      { id: 'imac',        name: 'iMac 24"',             w: 2240, h: 1260, type: 'desktop' },
-      { id: 'win-laptop',  name: 'Windows-Laptop',       w: 1366, h: 768,  type: 'laptop' },
-      { id: 'win-fhd',     name: 'Windows-PC Full HD',   w: 1920, h: 1080, type: 'desktop' },
-      { id: 'win-qhd',     name: 'Windows-PC WQHD',      w: 2560, h: 1440, type: 'desktop' }
+      { id: 'mbair13',      name: 'MacBook Air 13"',             w: 1470, h: 956,  type: 'laptop' },
+      { id: 'mbair15',      name: 'MacBook Air 15"',             w: 1710, h: 1112, type: 'laptop' },
+      { id: 'mbp14',        name: 'MacBook Pro 14"',             w: 1512, h: 982,  type: 'laptop' },
+      { id: 'mbp16',        name: 'MacBook Pro 16"',             w: 1728, h: 1117, type: 'laptop' },
+      { id: 'imac24',       name: 'iMac 24"',                    w: 2240, h: 1260, type: 'desktop' },
+      { id: 'win-1366',     name: 'Windows-Laptop (HD)',         w: 1366, h: 768,  type: 'laptop' },
+      { id: 'win-1536',     name: 'Windows-Laptop (Full HD, 125 %)', w: 1536, h: 864, type: 'laptop' },
+      { id: 'win-fhd',      name: 'Windows-PC Full HD',          w: 1920, h: 1080, type: 'desktop' },
+      { id: 'win-qhd',      name: 'Windows-PC WQHD',             w: 2560, h: 1440, type: 'desktop' }
     ]},
     { group: 'Eigene Größe', items: [
-      { id: 'custom',      name: 'Eigene Größe …',       w: 800,  h: 600,  type: 'desktop' }
+      { id: 'custom',       name: 'Eigene Größe …',              w: 800,  h: 600,  type: 'desktop' }
     ]}
   ];
   var STYLE = {
-    phone:   { bezel: 12, radius: 40, rotatable: true },
-    tablet:  { bezel: 16, radius: 26, rotatable: true },
-    laptop:  { bezel: 10, radius: 14, rotatable: false },
-    desktop: { bezel: 8,  radius: 8,  rotatable: false }
+    phone:    { bezel: 12, radius: 40, rotatable: true },
+    foldopen: { bezel: 12, radius: 28, rotatable: true },
+    tablet:   { bezel: 16, radius: 26, rotatable: true },
+    laptop:   { bezel: 10, radius: 14, rotatable: false },
+    desktop:  { bezel: 8,  radius: 8,  rotatable: false }
   };
+  var DEFAULT_DEVICE = 'iphone-18pm';
+  var DEFAULT_CMP = ['iphone-18pm', 'ipad-air-11', 'mbair13'];
+
   function findDevice(id) {
     for (var g = 0; g < DEVICES.length; g++)
       for (var i = 0; i < DEVICES[g].items.length; i++)
         if (DEVICES[g].items[i].id === id) return DEVICES[g].items[i];
     return null;
+  }
+
+  // Größe, Rahmen und Falz eines Geräts im aktuellen Zustand
+  function spec(d) {
+    var w = d.w, h = d.h, kind = d.type, hinge = null;
+    if (d.id === 'custom') { w = state.cw; h = state.ch; }
+    if (d.open && state.unfolded) { w = d.open.w; h = d.open.h; kind = 'foldopen'; hinge = d.hinge; }
+    var st = STYLE[kind];
+    if (st.rotatable && state.landscape) {
+      var t = w; w = h; h = t;
+      if (hinge) hinge = hinge === 'v' ? 'h' : 'v';
+    }
+    return { d: d, w: w, h: h, st: st, hinge: hinge, foldable: !!d.open, approx: !!d.approx };
+  }
+  function optLabel(d) {
+    var ca = d.approx ? 'ca. ' : '';
+    if (d.open) return d.name + ' (zu ' + ca + d.w + '×' + d.h + ' · auf ' + ca + d.open.w + '×' + d.open.h + ')';
+    if (d.id === 'custom') return d.name;
+    return d.name + ' (' + ca + d.w + '×' + d.h + ')';
   }
 
   // ---------- Suche ----------
@@ -255,9 +321,9 @@
   // ---------- Zustand ----------
   var STORAGE_KEY = 'geraete-browser-v1';
   var state = {
-    tabs: [], active: null, device: 'iphone-15', landscape: false,
+    tabs: [], active: null, device: DEFAULT_DEVICE, landscape: false, unfolded: false,
     cw: 800, ch: 600, fit: true, zoom: 100, nextId: 1,
-    mode: 'single', cmp: ['iphone-15', 'ipad-air', 'macbook-air'],
+    mode: 'single', cmp: DEFAULT_CMP.slice(),
     engine: 'builtin', newTab: true
   };
 
@@ -272,12 +338,13 @@
       if (!s || !Array.isArray(s.tabs) || !s.tabs.length) return;
       for (var k in s) if (k in state) state[k] = s[k];
     } catch (e) {}
-    if (!findDevice(state.device)) state.device = 'iphone-15';
+    if (!findDevice(state.device)) state.device = DEFAULT_DEVICE;
     if (!ENGINES[state.engine]) state.engine = 'builtin';
     if (!Array.isArray(state.cmp)) state.cmp = [];
     state.cmp = state.cmp.filter(function (id) { return id !== 'custom' && findDevice(id); }).slice(0, 4);
-    if (!state.cmp.length) state.cmp = ['iphone-15', 'ipad-air', 'macbook-air'];
+    if (!state.cmp.length) state.cmp = DEFAULT_CMP.slice();
     if (state.mode !== 'compare') state.mode = 'single';
+    state.unfolded = !!state.unfolded;
   }
 
   // ---------- Elemente ----------
@@ -286,9 +353,13 @@
       elScaler = $('scaler'), elInfo = $('info'), elStage = $('stage'), elFit = $('fit'),
       elZoom = $('zoom'), elZoomVal = $('zoomVal'), elRotate = $('rotate'),
       elCustom = $('customGroup'), elCw = $('cw'), elCh = $('ch'), elZoomGroup = $('zoomGroup'),
-      elEngine = $('engine'), elNewTab = $('newTab'), elModeBtn = $('modeBtn'),
+      elEngine = $('engine'), elNewTab = $('newTab'), elModeBtn = $('modeBtn'), elFoldBtn = $('foldBtn'),
       elDeviceGroup = $('deviceGroup'), elCmpPicker = $('cmpPicker'), elCmpList = $('cmpList'),
       elSingle = $('singleView'), elCompare = $('compareView');
+
+  var elCrease = document.createElement('div');
+  elCrease.className = 'crease off';
+  elFrame.appendChild(elCrease);
 
   var frames = {};       // tabId -> { iframe, empty }
   var cmpItems = [];     // Elemente der Vergleichsansicht
@@ -523,28 +594,27 @@
     elTabs.appendChild(add);
   }
 
-  function currentSize() {
-    var d = findDevice(state.device);
-    var w = d.w, h = d.h;
-    if (d.id === 'custom') { w = state.cw; h = state.ch; }
-    if (STYLE[d.type].rotatable && state.landscape) { var tmp = w; w = h; h = tmp; }
-    return { w: w, h: h, d: d };
-  }
   function avail() {
     var pad = isFull() ? 32 : 48;
     return { w: Math.max(100, elStage.clientWidth - pad), h: Math.max(100, elStage.clientHeight - pad - 24) };
   }
+  function stateText(s) {
+    var t = s.d.name;
+    if (s.foldable) t += state.unfolded ? ' (aufgeklappt)' : ' (zugeklappt)';
+    if (s.st.rotatable) t += s.w > s.h ? ' (quer)' : ' (hoch)';
+    return t;
+  }
 
   function layoutSingle() {
-    var s = currentSize();
-    var st = STYLE[s.d.type];
-    var b = st.bezel;
+    var s = spec(findDevice(state.device));
+    var b = s.st.bezel;
     var totalW = s.w + b * 2, totalH = s.h + b * 2;
 
     elFrame.style.width = s.w + 'px';
     elFrame.style.height = s.h + 'px';
     elFrame.style.borderWidth = b + 'px';
-    elFrame.style.borderRadius = st.radius + 'px';
+    elFrame.style.borderRadius = s.st.radius + 'px';
+    elCrease.className = 'crease ' + (s.hinge || 'off');
 
     var scale;
     if (state.fit) {
@@ -557,13 +627,13 @@
     elScaler.style.width = Math.round(totalW * scale) + 'px';
     elScaler.style.height = Math.round(totalH * scale) + 'px';
 
-    elInfo.textContent = s.d.name + (st.rotatable ? (state.landscape ? ' (quer)' : ' (hoch)') : '') +
-      ' · ' + s.w + ' × ' + s.h + ' px · Anzeige ' + Math.round(scale * 100) + ' %';
+    elInfo.textContent = stateText(s) + ' · ' + (s.approx ? 'ca. ' : '') + s.w + ' × ' + s.h +
+      ' px · Anzeige ' + Math.round(scale * 100) + ' %';
   }
 
   function syncCompare() {
     var tab = activeTab();
-    var key = [tab ? tab.id : '', tab ? tab.url : '', state.cmp.join(','), state.landscape].join('|');
+    var key = [tab ? tab.id : '', tab ? tab.url : '', state.cmp.join(','), state.landscape, state.unfolded].join('|');
     if (key === cmpKey) return;
     cmpKey = key;
     elCompare.innerHTML = '';
@@ -572,26 +642,26 @@
     state.cmp.forEach(function (id) {
       var d = findDevice(id);
       if (!d) return;
-      var st = STYLE[d.type];
-      var w = d.w, h = d.h;
-      if (st.rotatable && state.landscape) { w = d.h; h = d.w; }
+      var s = spec(d);
 
       var item = document.createElement('div'); item.className = 'cmp-item';
       var scaler = document.createElement('div'); scaler.className = 'scaler';
       var frame = document.createElement('div'); frame.className = 'device';
-      frame.style.width = w + 'px'; frame.style.height = h + 'px';
-      frame.style.borderWidth = st.bezel + 'px'; frame.style.borderRadius = st.radius + 'px';
+      frame.style.width = s.w + 'px'; frame.style.height = s.h + 'px';
+      frame.style.borderWidth = s.st.bezel + 'px'; frame.style.borderRadius = s.st.radius + 'px';
       var iframe = makeIframe(), empty = makeEmpty();
       iframe.classList.toggle('active', has);
       empty.classList.toggle('active', !has);
-      frame.appendChild(iframe); frame.appendChild(empty);
+      var crease = document.createElement('div');
+      crease.className = 'crease ' + (s.hinge || 'off');
+      frame.appendChild(iframe); frame.appendChild(empty); frame.appendChild(crease);
       scaler.appendChild(frame);
       var label = document.createElement('div'); label.className = 'cmp-label';
-      label.textContent = d.name + ' · ' + w + ' × ' + h;
+      label.textContent = stateText(s) + ' · ' + (s.approx ? 'ca. ' : '') + s.w + ' × ' + s.h;
       item.appendChild(scaler); item.appendChild(label);
       elCompare.appendChild(item);
       if (has) loadInto(iframe, tab.url);
-      cmpItems.push({ frame: frame, scaler: scaler, iframe: iframe, totalW: w + st.bezel * 2, totalH: h + st.bezel * 2 });
+      cmpItems.push({ frame: frame, scaler: scaler, iframe: iframe, totalW: s.w + s.st.bezel * 2, totalH: s.h + s.st.bezel * 2 });
     });
   }
 
@@ -648,10 +718,15 @@
     elDevice.value = state.device;
     elEngine.value = state.engine;
     elNewTab.checked = state.newTab;
-    var rotatable = compare
-      ? state.cmp.some(function (id) { var d = findDevice(id); return d && STYLE[d.type].rotatable; })
-      : STYLE[currentSize().d.type].rotatable;
-    elRotate.disabled = !rotatable;
+
+    var devices = compare
+      ? state.cmp.map(findDevice).filter(Boolean)
+      : [findDevice(state.device)];
+    var hasFold = devices.some(function (d) { return !!d.open; });
+    elFoldBtn.hidden = !hasFold;
+    elFoldBtn.textContent = state.unfolded ? 'Zuklappen' : 'Aufklappen';
+    elRotate.disabled = !devices.some(function (d) { return spec(d).st.rotatable; });
+
     elCw.value = state.cw; elCh.value = state.ch;
     elFit.checked = state.fit;
     elZoom.value = state.zoom;
@@ -757,6 +832,7 @@
     state.mode = state.mode === 'compare' ? 'single' : 'compare';
     renderAll();
   });
+  elFoldBtn.addEventListener('click', function () { state.unfolded = !state.unfolded; renderAll(); });
   elDevice.addEventListener('change', function () { state.device = elDevice.value; state.landscape = false; renderAll(); });
   elRotate.addEventListener('click', function () { state.landscape = !state.landscape; renderAll(); });
   elFit.addEventListener('change', function () { state.fit = elFit.checked; renderAll(); });
@@ -777,7 +853,7 @@
     g.items.forEach(function (d) {
       var o = document.createElement('option');
       o.value = d.id;
-      o.textContent = d.id === 'custom' ? d.name : d.name + ' (' + d.w + '×' + d.h + ')';
+      o.textContent = optLabel(d);
       og.appendChild(o);
     });
     elDevice.appendChild(og);
