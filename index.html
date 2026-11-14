@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Geräte-Browser</title>
+<style>
+  :root {
+    --bg: #eef0f3;
+    --panel: #ffffff;
+    --text: #1d1f23;
+    --muted: #6b7280;
+    --accent: #2563eb;
+    --accent-text: #ffffff;
+    --border: #d5d9df;
+    --bezel: #16181c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #101216;
+      --panel: #1c1f25;
+      --text: #e8eaed;
+      --muted: #9aa0a8;
+      --accent: #5b8def;
+      --accent-text: #0b0d10;
+      --border: #333842;
+      --bezel: #050506;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    display: flex; flex-direction: column;
+    height: 100dvh;
+    background: var(--bg); color: var(--text);
+    font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  header { background: var(--panel); border-bottom: 1px solid var(--border); }
+
+  /* Tabs */
+  .tabs { display: flex; align-items: flex-end; gap: 4px; padding: 8px 12px 0; overflow-x: auto; }
+  .tab {
+    display: flex; align-items: center; gap: 8px;
+    max-width: 220px; padding: 7px 8px 7px 12px;
+    border: 1px solid var(--border); border-bottom: none;
+    border-radius: 8px 8px 0 0; background: var(--bg);
+    color: var(--muted); cursor: pointer; white-space: nowrap;
+  }
+  .tab.active { background: var(--panel); color: var(--text); font-weight: 600; position: relative; top: 1px; }
+  .tab span.label { overflow: hidden; text-overflow: ellipsis; }
+  .tab button.close {
+    border: none; background: transparent; color: inherit; cursor: pointer;
+    font-size: 16px; line-height: 1; padding: 2px 5px; border-radius: 4px;
+  }
+  .tab button.close:hover { background: var(--border); }
+  .tabs .add {
+    border: 1px solid var(--border); background: var(--bg); color: var(--text);
+    border-radius: 6px; width: 30px; height: 30px; cursor: pointer; font-size: 18px; margin-bottom: 3px;
+  }
+
+  /* Toolbar */
+  .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--border); }
+  .urlbar { display: flex; flex: 1 1 340px; gap: 6px; min-width: 220px; }
+  input[type=text], input[type=number], select {
+    font: inherit; color: var(--text); background: var(--bg);
+    border: 1px solid var(--border); border-radius: 6px; padding: 7px 10px;
+  }
+  .urlbar input { flex: 1; min-width: 0; }
+  button.btn {
+    font: inherit; color: var(--text); background: var(--bg);
+    border: 1px solid var(--border); border-radius: 6px; padding: 7px 12px; cursor: pointer;
+  }
+  button.btn:hover { border-color: var(--accent); }
+  button.btn:disabled { opacity: .4; cursor: not-allowed; }
+  button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
+  .group { display: flex; align-items: center; gap: 6px; }
+  .group label { color: var(--muted); }
+  input[type=number] { width: 78px; }
+  input[type=range] { width: 110px; }
+
+  .hint {
+    padding: 6px 12px 8px; color: var(--muted); font-size: 12.5px;
+    border-top: 1px solid var(--border);
+  }
+  .hint button { all: unset; color: var(--accent); cursor: pointer; text-decoration: underline; }
+
+  /* Stage */
+  main { flex: 1; min-height: 0; overflow: auto; display: flex; padding: 24px; }
+  .scaler { margin: auto; flex: none; }
+  .device {
+    position: relative; background: #fff;
+    border: solid var(--bezel);
+    box-shadow: 0 10px 30px rgba(0,0,0,.28);
+    transform-origin: top left; overflow: hidden;
+  }
+  .device iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #fff; display: none; }
+  .device iframe.active { display: block; }
+  .empty {
+    position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+    text-align: center; padding: 24px; background: #fff; color: #444; font-size: 16px;
+  }
+  .empty.active { display: flex; }
+  .info { text-align: center; color: var(--muted); font-size: 12.5px; margin-top: 12px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="tabs" id="tabs"></div>
+  <div class="toolbar">
+    <form class="urlbar" id="urlForm">
+      <input type="text" id="url" placeholder="Adresse eingeben, z. B. wikipedia.org" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Webadresse">
+      <button class="btn primary" type="submit">Öffnen</button>
+    </form>
+    <button class="btn" id="reload" title="Seite neu laden">Neu laden</button>
+    <button class="btn" id="external" title="Adresse in einem normalen Browser-Tab öffnen">Extern öffnen</button>
+
+    <div class="group">
+      <label for="device">Gerät</label>
+      <select id="device"></select>
+    </div>
+    <div class="group" id="customGroup" hidden>
+      <input type="number" id="cw" min="200" max="4000" aria-label="Breite"> ×
+      <input type="number" id="ch" min="200" max="4000" aria-label="Höhe">
+    </div>
+    <button class="btn" id="rotate" title="Hoch- / Querformat">Drehen</button>
+
+    <div class="group">
+      <label><input type="checkbox" id="fit"> Automatisch einpassen</label>
+    </div>
+    <div class="group" id="zoomGroup">
+      <label for="zoom">Zoom</label>
+      <input type="range" id="zoom" min="25" max="150" step="5">
+      <span id="zoomVal"></span>
+    </div>
+  </div>
+  <div class="hint">
+    Bleibt die Seite leer oder zeigt einen Fehler? Dann erlaubt die Webseite das Einbetten nicht (z. B. Google, YouTube, viele Banken).
+    <button id="hintExternal">Dann extern öffnen.</button>
+  </div>
+</header>
+
+<main id="stage">
+  <div>
+    <div class="scaler" id="scaler">
+      <div class="device" id="device-frame"></div>
+    </div>
+    <div class="info" id="info"></div>
+  </div>
+</main>
+
+<script>
+(function () {
+  // ---------- Geräteliste ----------
+  var DEVICES = [
+    { group: 'Handys', items: [
+      { id: 'iphone-se',   name: 'iPhone SE',            w: 375,  h: 667,  type: 'phone' },
+      { id: 'iphone-15',   name: 'iPhone 15',            w: 393,  h: 852,  type: 'phone' },
+      { id: 'iphone-15pm', name: 'iPhone 15 Pro Max',    w: 430,  h: 932,  type: 'phone' },
+      { id: 'pixel-8',     name: 'Google Pixel 8',       w: 412,  h: 915,  type: 'phone' },
+      { id: 'galaxy-s23',  name: 'Samsung Galaxy S23',   w: 360,  h: 780,  type: 'phone' },
+      { id: 'galaxy-fold', name: 'Galaxy Z Fold (zugeklappt)', w: 344, h: 882, type: 'phone' }
+    ]},
+    { group: 'Tablets', items: [
+      { id: 'ipad-mini',   name: 'iPad mini',            w: 744,  h: 1133, type: 'tablet' },
+      { id: 'ipad-air',    name: 'iPad Air',             w: 820,  h: 1180, type: 'tablet' },
+      { id: 'ipad-pro',    name: 'iPad Pro 12,9"',       w: 1024, h: 1366, type: 'tablet' },
+      { id: 'galaxy-tab',  name: 'Samsung Galaxy Tab S8', w: 800, h: 1280, type: 'tablet' }
+    ]},
+    { group: 'Computer', items: [
+      { id: 'macbook-air', name: 'MacBook Air 13"',      w: 1440, h: 900,  type: 'laptop' },
+      { id: 'macbook-pro', name: 'MacBook Pro 16"',      w: 1728, h: 1117, type: 'laptop' },
+      { id: 'imac',        name: 'iMac 24"',             w: 2240, h: 1260, type: 'desktop' },
+      { id: 'win-laptop',  name: 'Windows-Laptop',       w: 1366, h: 768,  type: 'laptop' },
+      { id: 'win-fhd',     name: 'Windows-PC Full HD',   w: 1920, h: 1080, type: 'desktop' },
+      { id: 'win-qhd',     name: 'Windows-PC WQHD',      w: 2560, h: 1440, type: 'desktop' }
+    ]},
+    { group: 'Eigene Größe', items: [
+      { id: 'custom',      name: 'Eigene Größe …',       w: 800,  h: 600,  type: 'desktop' }
+    ]}
+  ];
+  var STYLE = {
+    phone:   { bezel: 12, radius: 40, rotatable: true },
+    tablet:  { bezel: 16, radius: 26, rotatable: true },
+    laptop:  { bezel: 10, radius: 14, rotatable: false },
+    desktop: { bezel: 8,  radius: 8,  rotatable: false }
+  };
+  function findDevice(id) {
+    for (var g = 0; g < DEVICES.length; g++)
+      for (var i = 0; i < DEVICES[g].items.length; i++)
+        if (DEVICES[g].items[i].id === id) return DEVICES[g].items[i];
+    return DEVICES[0].items[1];
+  }
+
+  // ---------- Zustand ----------
+  var STORAGE_KEY = 'geraete-browser-v1';
+  var state = { tabs: [], active: null, device: 'iphone-15', landscape: false, cw: 800, ch: 600, fit: true, zoom: 100, nextId: 1 };
+
+  function save() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        tabs: state.tabs, active: state.active, device: state.device, landscape: state.landscape,
+        cw: state.cw, ch: state.ch, fit: state.fit, zoom: state.zoom, nextId: state.nextId
+      }));
+    } catch (e) {}
+  }
+  function load() {
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      var s = JSON.parse(raw);
+      if (s && Array.isArray(s.tabs) && s.tabs.length) {
+        for (var k in s) if (k in state) state[k] = s[k];
+      }
+    } catch (e) {}
+  }
+
+  // ---------- Elemente ----------
+  var $ = function (id) { return document.getElementById(id); };
+  var elTabs = $('tabs'), elUrl = $('url'), elDevice = $('device'), elFrame = $('device-frame'),
+      elScaler = $('scaler'), elInfo = $('info'), elStage = $('stage'), elFit = $('fit'),
+      elZoom = $('zoom'), elZoomVal = $('zoomVal'), elRotate = $('rotate'),
+      elCustom = $('customGroup'), elCw = $('cw'), elCh = $('ch'), elZoomGroup = $('zoomGroup');
+
+  var frames = {}; // tabId -> { iframe, empty }
+
+  // ---------- Hilfsfunktionen ----------
+  function normalizeUrl(input) {
+    var v = (input || '').trim();
+    if (!v) return '';
+    if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(v)) {
+      v = (/^(localhost|127\.0\.0\.1)(:|\/|$)/i.test(v) ? 'http://' : 'https://') + v;
+    }
+    try { return new URL(v).href; } catch (e) { return ''; }
+  }
+  function titleFor(url) {
+    if (!url) return 'Neuer Tab';
+    try { return new URL(url).hostname.replace(/^www\./, ''); } catch (e) { return url; }
+  }
+  function activeTab() {
+    for (var i = 0; i < state.tabs.length; i++) if (state.tabs[i].id === state.active) return state.tabs[i];
+    return null;
+  }
+
+  // ---------- Tabs ----------
+  function addTab(url) {
+    var tab = { id: state.nextId++, url: url || '' };
+    state.tabs.push(tab);
+    state.active = tab.id;
+    createFrame(tab);
+    renderAll();
+  }
+  function closeTab(id) {
+    if (state.tabs.length === 1) {
+      state.tabs[0].url = '';
+      setFrameUrl(state.tabs[0]);
+      renderAll();
+      return;
+    }
+    var idx = state.tabs.findIndex(function (t) { return t.id === id; });
+    state.tabs.splice(idx, 1);
+    if (frames[id]) {
+      frames[id].iframe.remove(); frames[id].empty.remove(); delete frames[id];
+    }
+    if (state.active === id) state.active = state.tabs[Math.max(0, idx - 1)].id;
+    renderAll();
+  }
+  function createFrame(tab) {
+    var iframe = document.createElement('iframe');
+    iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads');
+    iframe.setAttribute('referrerpolicy', 'no-referrer');
+    iframe.title = 'Vorschau';
+    var empty = document.createElement('div');
+    empty.className = 'empty';
+    empty.innerHTML = '<div>Gib oben eine Adresse ein und drücke „Öffnen“.<br><small>Du kannst oben mit „+“ weitere Tabs anlegen.</small></div>';
+    elFrame.appendChild(iframe);
+    elFrame.appendChild(empty);
+    frames[tab.id] = { iframe: iframe, empty: empty };
+    setFrameUrl(tab);
+  }
+  function setFrameUrl(tab) {
+    var f = frames[tab.id];
+    if (!f) return;
+    f.iframe.src = tab.url ? tab.url : 'about:blank';
+  }
+
+  // ---------- Rendering ----------
+  function renderTabs() {
+    elTabs.innerHTML = '';
+    state.tabs.forEach(function (t) {
+      var d = document.createElement('div');
+      d.className = 'tab' + (t.id === state.active ? ' active' : '');
+      var label = document.createElement('span');
+      label.className = 'label';
+      label.textContent = titleFor(t.url);
+      var x = document.createElement('button');
+      x.className = 'close'; x.type = 'button'; x.textContent = '×'; x.title = 'Tab schließen';
+      x.addEventListener('click', function (e) { e.stopPropagation(); closeTab(t.id); });
+      d.appendChild(label); d.appendChild(x);
+      d.addEventListener('click', function () { state.active = t.id; renderAll(); });
+      elTabs.appendChild(d);
+    });
+    var add = document.createElement('button');
+    add.className = 'add'; add.type = 'button'; add.textContent = '+'; add.title = 'Neuer Tab';
+    add.addEventListener('click', function () { addTab(''); elUrl.focus(); });
+    elTabs.appendChild(add);
+  }
+
+  function currentSize() {
+    var d = findDevice(state.device);
+    var w = d.w, h = d.h;
+    if (d.id === 'custom') { w = state.cw; h = state.ch; }
+    if (STYLE[d.type].rotatable && state.landscape) { var tmp = w; w = h; h = tmp; }
+    return { w: w, h: h, d: d };
+  }
+
+  function layout() {
+    var s = currentSize();
+    var st = STYLE[s.d.type];
+    var b = st.bezel;
+    var totalW = s.w + b * 2, totalH = s.h + b * 2;
+
+    elFrame.style.width = s.w + 'px';
+    elFrame.style.height = s.h + 'px';
+    elFrame.style.borderWidth = b + 'px';
+    elFrame.style.borderRadius = st.radius + 'px';
+
+    var scale;
+    if (state.fit) {
+      var availW = Math.max(100, elStage.clientWidth - 48);
+      var availH = Math.max(100, elStage.clientHeight - 48 - 24);
+      scale = Math.min(1, availW / totalW, availH / totalH);
+    } else {
+      scale = state.zoom / 100;
+    }
+    elFrame.style.transform = 'scale(' + scale + ')';
+    elScaler.style.width = Math.round(totalW * scale) + 'px';
+    elScaler.style.height = Math.round(totalH * scale) + 'px';
+
+    elInfo.textContent = s.d.name + (STYLE[s.d.type].rotatable ? (state.landscape ? ' (quer)' : ' (hoch)') : '') +
+      ' · ' + s.w + ' × ' + s.h + ' px · Anzeige ' + Math.round(scale * 100) + ' %';
+    elZoomVal.textContent = state.zoom + ' %';
+  }
+
+  function renderAll() {
+    renderTabs();
+    state.tabs.forEach(function (t) {
+      var f = frames[t.id];
+      var isActive = t.id === state.active;
+      f.iframe.classList.toggle('active', isActive && !!t.url);
+      f.empty.classList.toggle('active', isActive && !t.url);
+    });
+    var tab = activeTab();
+    elUrl.value = tab ? tab.url : '';
+
+    elDevice.value = state.device;
+    var s = currentSize();
+    elRotate.disabled = !STYLE[s.d.type].rotatable;
+    elCustom.hidden = state.device !== 'custom';
+    elCw.value = state.cw; elCh.value = state.ch;
+    elFit.checked = state.fit;
+    elZoom.value = state.zoom;
+    elZoomGroup.style.opacity = state.fit ? .4 : 1;
+    elZoom.disabled = state.fit;
+    layout();
+    save();
+  }
+
+  // ---------- Ereignisse ----------
+  $('urlForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var tab = activeTab();
+    var url = normalizeUrl(elUrl.value);
+    if (!url) { elUrl.focus(); return; }
+    tab.url = url;
+    setFrameUrl(tab);
+    renderAll();
+  });
+  $('reload').addEventListener('click', function () {
+    var tab = activeTab();
+    if (tab && tab.url) setFrameUrl(tab);
+  });
+  function openExternal() {
+    var tab = activeTab();
+    var url = (tab && tab.url) || normalizeUrl(elUrl.value);
+    if (url) window.open(url, '_blank', 'noopener');
+  }
+  $('external').addEventListener('click', openExternal);
+  $('hintExternal').addEventListener('click', openExternal);
+
+  elDevice.addEventListener('change', function () { state.device = elDevice.value; state.landscape = false; renderAll(); });
+  elRotate.addEventListener('click', function () { state.landscape = !state.landscape; renderAll(); });
+  elFit.addEventListener('change', function () { state.fit = elFit.checked; renderAll(); });
+  elZoom.addEventListener('input', function () { state.zoom = +elZoom.value; renderAll(); });
+  function readCustom() {
+    state.cw = Math.min(4000, Math.max(200, +elCw.value || 800));
+    state.ch = Math.min(4000, Math.max(200, +elCh.value || 600));
+    renderAll();
+  }
+  elCw.addEventListener('change', readCustom);
+  elCh.addEventListener('change', readCustom);
+  window.addEventListener('resize', layout);
+
+  // ---------- Start ----------
+  DEVICES.forEach(function (g) {
+    var og = document.createElement('optgroup');
+    og.label = g.group;
+    g.items.forEach(function (d) {
+      var o = document.createElement('option');
+      o.value = d.id;
+      o.textContent = d.id === 'custom' ? d.name : d.name + ' (' + d.w + '×' + d.h + ')';
+      og.appendChild(o);
+    });
+    elDevice.appendChild(og);
+  });
+
+  load();
+  if (!state.tabs.length) {
+    state.tabs.push({ id: state.nextId++, url: '' });
+    state.active = state.tabs[0].id;
+  }
+  if (!activeTab()) state.active = state.tabs[0].id;
+  state.tabs.forEach(createFrame);
+  renderAll();
+})();
+</script>
+</body>
+</html>
